@@ -1,0 +1,2 @@
+// SHOW ALL DATABASES
+show dbs
