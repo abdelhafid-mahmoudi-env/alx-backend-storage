@@ -1,2 +1,1 @@
-// SHOW ALL DATABASES
-show dbs
+tet:wq
