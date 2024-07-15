@@ -1,0 +1,2 @@
+// DELETE WHERE NAME EQUAL
+db.school.deleteMany({name: "Holberton school"})
