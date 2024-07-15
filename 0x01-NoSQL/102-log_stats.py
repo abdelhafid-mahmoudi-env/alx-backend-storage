@@ -5,22 +5,22 @@ from pymongo import MongoClient
 
 def mycheck_stats():
     """ provides some stats about Nginx logs stored in MongoDB:"""
-    client = MongoClient()
-    collection = client.logs.nginx
+    cli = MongoClient()
+    collect = cli.logs.nginx
 
-    num_of_docs = collection.count_documents({})
-    print("{} logs".format(num_of_docs))
+    numDocs = collect.count_documents({})
+    print("{} logs".format(numDocs))
     print("Methods:")
-    methods_list = ["GET", "POST", "PUT", "PATCH", "DELETE"]
-    for method in methods_list:
-        method_count = collection.count_documents({"method": method})
+    methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+    for method in methods:
+        method_count = collect.count_documents({"method": method})
         print("\tmethod {}: {}".format(method, method_count))
-    status = collection.count_documents({"method": "GET", "path": "/status"})
+    status = collect.count_documents({"method": "GET", "path": "/status"})
     print("{} status check".format(status))
 
     print("IPs:")
 
-    top_IPs = collection.aggregate([
+    ips = collect.aggregate([
         {"$group":
          {
              "_id": "$ip",
@@ -35,9 +35,9 @@ def mycheck_stats():
             "count": 1
         }}
     ])
-    for top_ip in top_IPs:
-        count = top_ip.get("count")
-        ip_address = top_ip.get("ip")
+    for ip in ips:
+        count = ip.get("count")
+        ip_address = ip.get("ip")
         print("\t{}: {}".format(ip_address, count))
 
 
