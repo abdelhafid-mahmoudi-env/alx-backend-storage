@@ -1,21 +1,38 @@
 #!/usr/bin/env python3
-'''Implementing an expiring web cache and tracker'''
+'''A module with tools for request caching and tracking.
+'''
 import redis
 import requests
-from datetime import timedelta
+from functools import wraps
+from typing import Callable
 
 
+redis_store = redis.Redis()
+'''The module-level Redis instance.
+'''
+
+
+def data_cacher(method: Callable) -> Callable:
+    '''Caches the output of fetched data.
+    '''
+    @wraps(method)
+    def invoker(url) -> str:
+        '''The wrapper function for caching the output.
+        '''
+        redis_store.incr(f'count:{url}')
+        result = redis_store.get(f'result:{url}')
+        if result:
+            return result.decode('utf-8')
+        result = method(url)
+        redis_store.set(f'count:{url}', 0)
+        redis_store.setex(f'result:{url}', 10, result)
+        return result
+    return invoker
+
+
+@data_cacher
 def get_page(url: str) -> str:
-    '''Define get_page'''
-    if url is None or len(url.strip()) == 0:
-        return ''
-    redis_store = redis.Redis()
-    r_key = 'result:{}'.format(url)
-    req_uest = 'count:{}'.format(url)
-    result = redis_store.get(r_key)
-    if result is not None:
-        redis_store.incr(req_uest)
-        return result.decode('utf-8')
-    result = requests.get(url).content.decode('utf-8')
-    redis_store.setex(r_key, timedelta(seconds=10), result)
-    return result
+    '''Returns the content of a URL after caching the request's response,
+    and tracking the request.
+    '''
+    return requests.get(url).text
