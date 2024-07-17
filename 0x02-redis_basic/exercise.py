@@ -1,63 +1,63 @@
 #!/usr/bin/env python3
-"""Exercise Module"""
+'''A module for interfacing with Redis NoSQL data storage. '''
+from functools import wraps
+from typing import Any, Callable, Union
 import redis
 import uuid
-import functools
-from typing import Union, Callable, Optional
 
 
 def count_calls(method: Callable) -> Callable:
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        key = method.__qualname__
-        self._redis.incr(key)
+    @wraps(method)
+    def wrapper(self, *args, **kwargs) -> Any:
+        if isinstance(self._redis, redis.Redis):
+            self._redis.incr(method.__qualname__)
         return method(self, *args, **kwargs)
+
     return wrapper
 
 
 def call_history(method: Callable) -> Callable:
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        input_key = f"{method.__qualname__}:inputs"
-        output_key = f"{method.__qualname__}:outputs"
-        self._redis.rpush(input_key, str(args))
-        output = method(self, *args, **kwargs)
-        self._redis.rpush(output_key, str(output))
-        return output
+    @wraps(method)
+    def wrapper(self, *args, **kwargs) -> Any:
+        input_key = f'{method.__qualname__}:inputs'
+        output_key = f'{method.__qualname__}:outputs'
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(input_key, str(args))
+        result = method(self, *args, **kwargs)
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(output_key, result)
+        return result
     return wrapper
 
 
-def replay(fn: Callable) -> None:
-    if fn is None or not hasattr(fn, '__self__'):
+def replay(method: Callable) -> None:
+    if method is None or not hasattr(method, '__self__'):
         return
-    rstore = getattr(fn.__self__, '_redis', None)
-    if not isinstance(rstore, redis.Redis):
+    redis_instance = getattr(method.__self__, '_redis', None)
+    if not isinstance(redis_instance, redis.Redis):
         return
-    input_name = fn.__qualname__
-    in_key = '{}:inputs'.format(input_name)
-    out_key = '{}:outputs'.format(input_name)
-    callcounter = 0
-    if rstore.exists(input_name) != 0:
-        callcounter = int(rstore.get(input_name))
-    print('{} was called {} times:'.format(input_name, callcounter))
-    input = rstore.lrange(in_key, 0, -1)
-    output = rstore.lrange(out_key, 0, -1)
-    for fxn_input, fxn_output in zip(input, output):
-        print('{}(*{}) -> {}'.format(
-            input_name,
-            fxn_input.decode("utf-8"),
-            fxn_output,
-        ))
+    method_name = method.__qualname__
+    input_key = f'{method_name}:inputs'
+    output_key = f'{method_name}:outputs'
+    call_count = 0
+    if redis_instance.exists(method_name) != 0:
+        call_count = int(redis_instance.get(method_name))
+    print(f'{method_name} was called {call_count} times:')
+    inputs = redis_instance.lrange(input_key, 0, -1)
+    outputs = redis_instance.lrange(output_key, 0, -1)
+    for inp, out in zip(inputs, outputs):
+        print(f'{method_name}(*{inp.decode("utf-8")}) -> {out}')
 
 
 class Cache:
-    def __init__(self):
+
+    def __init__(self) -> None:
         self._redis = redis.Redis()
-        self._redis.flushdb()
+        self._redis.flushdb(True)
 
     @call_history
     @count_calls
-    def store(self, data: Union[str, bytes, int, float]) -> str:
+    def store(self, data:  Union[str, bytes, int, float]) -> str:
         key = str(uuid.uuid4())
         self._redis.set(key, data)
         return key
@@ -65,17 +65,13 @@ class Cache:
     def get(
             self,
             key: str,
-            fn: Optional[Callable] = None
-            ) -> Optional[Union[str, bytes, int, float]]:
+            fn: Callable = None,
+            ) -> Union[str, bytes, int, float]:
         data = self._redis.get(key)
-        if data is not None and fn is not None:
-            return fn(data)
-        return data
+        return fn(data) if fn is not None else data
 
     def get_str(self, key: str) -> str:
-        data = self.get(key, lambda d: d.decode('utf-8'))
-        return data
+        return self.get(key, lambda x: x.decode('utf-8'))
 
     def get_int(self, key: str) -> int:
-        data = self.get(key, int)
-        return data
+        return self.get(key, lambda x: int(x))
