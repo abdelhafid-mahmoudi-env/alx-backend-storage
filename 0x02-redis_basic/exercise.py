@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""
-Exercise Module
-"""
+"""Exercise Module"""
 import redis
 import uuid
 import functools
 from typing import Union, Callable, Optional
+
 
 def count_calls(method: Callable) -> Callable:
     @functools.wraps(method)
@@ -14,6 +13,7 @@ def count_calls(method: Callable) -> Callable:
         self._redis.incr(key)
         return method(self, *args, **kwargs)
     return wrapper
+
 
 def call_history(method: Callable) -> Callable:
     @functools.wraps(method)
@@ -26,19 +26,29 @@ def call_history(method: Callable) -> Callable:
         return output
     return wrapper
 
-def replay(method: Callable) -> None:
-    redis_instance = method.__self__._redis
-    method_name = method.__qualname__
-    input_key = f"{method_name}:inputs"
-    output_key = f"{method_name}:outputs"
 
-    inputs = redis_instance.lrange(input_key, 0, -1)
-    outputs = redis_instance.lrange(output_key, 0, -1)
-    print(f"{method_name} was called {len(inputs)} times:")
-    for inp, outp in zip(inputs, outputs):
-        inp = inp.decode('utf-8')
-        outp = outp.decode('utf-8')
-        print(f"{method_name}(*{inp}) -> {outp}")
+def replay(fn: Callable) -> None:
+    if fn is None or not hasattr(fn, '__self__'):
+        return
+    rstore = getattr(fn.__self__, '_redis', None)
+    if not isinstance(rstore, redis.Redis):
+        return
+    input_name = fn.__qualname__
+    in_key = '{}:inputs'.format(input_name)
+    out_key = '{}:outputs'.format(input_name)
+    callcounter = 0
+    if rstore.exists(input_name) != 0:
+        callcounter = int(rstore.get(input_name))
+    print('{} was called {} times:'.format(input_name, callcounter))
+    input = rstore.lrange(in_key, 0, -1)
+    output = rstore.lrange(out_key, 0, -1)
+    for fxn_input, fxn_output in zip(input, output):
+        print('{}(*{}) -> {}'.format(
+            input_name,
+            fxn_input.decode("utf-8"),
+            fxn_output,
+        ))
+
 
 class Cache:
     def __init__(self):
@@ -52,7 +62,11 @@ class Cache:
         self._redis.set(key, data)
         return key
 
-    def get(self, key: str, fn: Optional[Callable] = None) -> Optional[Union[str, bytes, int, float]]:
+    def get(
+            self,
+            key: str,
+            fn: Optional[Callable] = None
+            ) -> Optional[Union[str, bytes, int, float]]:
         data = self._redis.get(key)
         if data is not None and fn is not None:
             return fn(data)
