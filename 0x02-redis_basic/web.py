@@ -1,25 +1,52 @@
 #!/usr/bin/env python3
-""" Web cache module """
+"""
+A module for request caching and tracking.
+"""
 import redis
 import requests
+from functools import wraps
 from typing import Callable
 
 
+redis_client = redis.Redis()
+
+
+def cache_response(method: Callable) -> Callable:
+    """
+    Decorator to cache the response
+    """
+    @wraps(method)
+    def wrapper(url: str) -> str:
+        """
+        Wrapper function to handle caching and request tracking.
+        """
+        if not isinstance(url, str):
+            raise TypeError("URL must be a string")
+        
+        redis_client.incr(f"count:{url}")
+        
+        cached_result = redis_client.get(f"result:{url}")
+        if cached_result:
+            return cached_result.decode("utf-8")
+        
+        result = method(url)
+        
+        if not isinstance(result, str):
+            raise ValueError("The result must be a string")
+        
+        redis_client.setex(f"result:{url}", 10, result)
+        return result
+    return wrapper
+
+
+@cache_response
 def get_page(url: str) -> str:
-    _redis = redis.Redis()
-    count_key = f"count:{url}"
-    _redis.incr(count_key)
-    
-    cached_data = _redis.get(url)
-    if cached_data:
-        return cached_data.decode('utf-8')
-    
-    response = requests.get(url)
-    _redis.setex(url, 10, response.text)
-    return response.text
-
-
-if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk"
-    print(get_page(url))
-    print(get_page(url))
+    """
+    Fetches the content of a URL
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.text
+    except requests.RequestException as e:
+        raise RuntimeError(f"Error fetching the URL {url}: {e}")
