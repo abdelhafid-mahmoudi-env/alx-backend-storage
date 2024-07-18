@@ -2,8 +2,8 @@
 """This module provides a function to fetch."""
 import requests
 import redis
-from typing import Callable
 import functools
+from typing import Callable, Any
 
 
 redis_instance = redis.Redis()
@@ -12,10 +12,10 @@ redis_instance = redis.Redis()
 def count_requests(method: Callable) -> Callable:
     """Decorator to count how many times"""
     @functools.wraps(method)
-    def wrapper(url: str) -> str:
+    def wrapper(url: str, *args: Any, **kwargs: Any) -> str:
         count_key = f"count:{url}"
         redis_instance.incr(count_key)
-        return method(url)
+        return method(url, *args, **kwargs)
     return wrapper
 
 
@@ -23,12 +23,12 @@ def cache_page(expiration: int) -> Callable:
     """Decorator to cache the HTML content"""
     def decorator(method: Callable) -> Callable:
         @functools.wraps(method)
-        def wrapper(url: str) -> str:
+        def wrapper(url: str, *args: Any, **kwargs: Any) -> str:
             cache_key = f"cache:{url}"
             cached_content = redis_instance.get(cache_key)
             if cached_content:
                 return cached_content.decode('utf-8')
-            html_content = method(url)
+            html_content = method(url, *args, **kwargs)
             redis_instance.setex(cache_key, expiration, html_content)
             return html_content
         return wrapper
