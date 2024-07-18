@@ -46,5 +46,3 @@ def get_page(url: str) -> str:
 if __name__ == "__main__":
     url = 'http://slowwly.robertomurray.co.uk'
     print(get_page(url))
-    print(get_page(url))
-    print(f"URL {url} accessed {redis_instance.get(f'count:{url}').decode('utf-8')} times")
