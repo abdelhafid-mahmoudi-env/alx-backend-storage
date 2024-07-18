@@ -36,3 +36,10 @@ def get_page(url: str) -> str:
     """Fetch the HTML content of a URL and cache it."""
     response = requests.get(url)
     return response.text
+
+
+if __name__ == "__main__":
+    url = "http://slowwly.robertomurray.co.uk"
+    print(get_page(url))
+    print(get_page(url))
+    print(get_page(url))
