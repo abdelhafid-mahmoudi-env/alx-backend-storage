@@ -6,15 +6,13 @@ from typing import Callable
 from functools import wraps
 
 
-r = redis.Redis()
-
-
 def cache_with_expiry(expiry: int) -> Callable:
     """Decorator to cache the result."""
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(url: str) -> str:
             """Wrapper function to cache"""
+            r = redis.Redis()
             r.incr(f"count:{url}")
             cached_content = r.get(f"cached:{url}")
             if cached_content:
