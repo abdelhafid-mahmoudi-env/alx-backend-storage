@@ -1,17 +1,38 @@
 #!/usr/bin/env python3
-"""Web cache module"""
-import redis
+"""Web caching and tracking module."""
 import requests
+import redis
+from typing import Callable
+from functools import wraps
 
 
+r = redis.Redis()
+
+
+def cache_with_expiry(expiry: int) -> Callable:
+    """Decorator to cache the result."""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(url: str) -> str:
+            """Wrapper function to cache with expiry."""
+            r.incr(f"count:{url}")
+            cached_content = r.get(f"cached:{url}")
+            if cached_content:
+                return cached_content.decode('utf-8')
+            response = func(url)
+            r.setex(f"cached:{url}", expiry, response)
+            return response
+        return wrapper
+    return decorator
+
+
+@cache_with_expiry(10)
 def get_page(url: str) -> str:
-    r = redis.Redis()
-    key = f"count:{url}"
-    r.incr(key)
-    cached_page = r.get(url)
-    if cached_page:
-        return cached_page.decode("utf-8")
-
+    """Fetch the HTML content"""
     response = requests.get(url)
-    r.setex(url, 10, response.text)
     return response.text
+
+
+if __name__ == "__main__":
+    url = "http://slowwly.robertomurray.co.uk"
+    print(get_page(url))
