@@ -14,7 +14,7 @@ def cache_with_expiry(expiry: int) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(url: str) -> str:
-            """Wrapper function to cache with expiry."""
+            """Wrapper function to cache"""
             r.incr(f"count:{url}")
             cached_content = r.get(f"cached:{url}")
             if cached_content:
@@ -28,7 +28,7 @@ def cache_with_expiry(expiry: int) -> Callable:
 
 @cache_with_expiry(10)
 def get_page(url: str) -> str:
-    """Fetch the HTML content"""
+    """Fetch the HTML content."""
     response = requests.get(url)
     return response.text
 
