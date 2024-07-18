@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Module to interact with Redis for cache management.
+Module pour interagir avec Redis pour la gestion de cache.
 """
 import redis
 import uuid
@@ -10,70 +10,72 @@ from functools import wraps
 
 class Cache:
     """
-    Cache management class using Redis.
+    Classe de gestion de cache utilisant Redis.
     """
     def __init__(self):
         """
-        Initialize the Redis client and clean the database.
+        Initialisation du client Redis et nettoyage de la base de données.
         """
         self._redis = redis.Redis()
         self._redis.flushdb()
 
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """
-        Store data in Redis using a random key.
+        Stocke les données dans Redis en utilisant une clé aléatoire.
 
         Args:
-            data: Data to store (str, bytes, int, float)
+            data: Donnée à stocker (str, bytes, int, float)
 
         Returns:
-            The key under which the data is stored.
+            La clé sous laquelle les données sont stockées.
         """
-        random_key = str(uuid.uuid4())
-        self._redis.set(random_key, data)
-        return random_key
+        key = str(uuid.uuid4())
+        self._redis.set(key, data)
+        return key
 
-    def get(self, key: str, conversion_fn: Callable = None) -> Union[str, bytes, int, float]:
+    def get(
+            self, key: str, fn: Callable = None
+            ) -> Union[str, bytes, int, float]:
         """
-        Retrieve a value from Redis and convert it if necessary.
+        Récupère une valeur de Redis et la convertit si nécessaire.
 
         Args:
-            key: The Redis key.
-            conversion_fn: Optional conversion function.
+            key: La clé Redis.
+            fn: Fonction optionnelle de conversion.
 
         Returns:
-            Converted value if conversion_fn is provided, otherwise raw value.
+            Valeur convertie si fn est fournie, sinon valeur brute.
         """
-        raw_value = self._redis.get(key)
-        if conversion_fn is not None:
-            return conversion_fn(raw_value)
-        return raw_value
+        value = self._redis.get(key)
+        if fn is not None:
+            return fn(value)
+        return value
 
     def get_str(self, key: str) -> str:
-        """Retrieve a string from Redis."""
+        """Récupère une chaîne de Redis."""
         return self.get(key, lambda x: x.decode())
 
     def get_int(self, key: str) -> int:
-        """Retrieve an integer from Redis."""
+        """Récupère un entier de Redis."""
         return self.get(key, int)
 
 
 def count_calls(method: Callable) -> Callable:
     """
-    Decorator to count and store the number of times a method is called.
+    Décorateur compte+stocke nombre fois qu'une méthode est appelée.
     """
-    method_key = method.__qualname__
+    key = method.__qualname__
 
     @wraps(method)
     def wrapper(self, *args, **kwargs):
-        self._redis.incr(method_key)
+        self._redis.incr(key)
         return method(self, *args, **kwargs)
     return wrapper
 
 
 def call_history(method: Callable) -> Callable:
     """
-    Decorator that stores the call history of the function.
+    Décorateur qui stocke l'historique des appels de la fonction.
     """
     inputs_key = f"{method.__qualname__}:inputs"
     outputs_key = f"{method.__qualname__}:outputs"
@@ -89,19 +91,20 @@ def call_history(method: Callable) -> Callable:
 
 def replay(method: Callable):
     """
-    Display the call history for a given method.
+    Affiche l'historique des appels pour une méthode donnée.
     """
     inputs_key = f"{method.__qualname__}:inputs"
     outputs_key = f"{method.__qualname__}:outputs"
-    input_list = method.__self__._redis.lrange(inputs_key, 0, -1)
-    output_list = method.__self__._redis.lrange(outputs_key, 0, -1)
-    call_count = method.__self__._redis.get(method.__qualname__)
+    inputs = method.__self__._redis.lrange(inputs_key, 0, -1)
+    outputs = method.__self__._redis.lrange(outputs_key, 0, -1)
+    method_call_count = method.__self__._redis.get(method.__qualname__)
 
-    print(f"{method.__qualname__} was called {call_count.decode('utf-8')} times:")
-    for inp, outp in zip(input_list, output_list):
-        print(f"{method.__qualname__}{inp.decode()} -> {outp.decode()}")
+    print(f"{method.__qualname__} was called" +
+          f"{method_call_count.decode('utf-8')} times:")
+    for input, output in zip(inputs, outputs):
+        print(f"{method.__qualname__}{input.decode()} -> {output.decode()}")
 
 
-# Applying the decorators
+# Application des décorateurs
 Cache.store = count_calls(Cache.store)
 Cache.store = call_history(Cache.store)
