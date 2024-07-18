@@ -1,38 +1,31 @@
 #!/usr/bin/env python3
-"""Module for implementing"""
+'''A module with tools for request.'''
 import redis
 import requests
-from typing import Callable
 from functools import wraps
+from typing import Callable
 
 
-r = redis.Redis()
+redis_store = redis.Redis()
 
 
-def cache_with_tracking(expiration: int):
-    """Decorator to cache the result of a function."""
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(url: str) -> str:
-            count_key = f"count:{url}"
-            r.incr(count_key)
-            cached_html = r.get(url)
-            if cached_html:
-                return cached_html.decode('utf-8')
-            result = func(url)
-            r.setex(url, expiration, result)
-            return result
-        return wrapper
-    return decorator
+def data_cacher(method: Callable) -> Callable:
+    '''Caches the output of fetched.'''
+    @wraps(method)
+    def invoker(url) -> str:
+        '''The wrapper function'''
+        redis_store.incr(f'count:{url}')
+        result = redis_store.get(f'result:{url}')
+        if result:
+            return result.decode('utf-8')
+        result = method(url)
+        redis_store.set(f'count:{url}', 0)
+        redis_store.setex(f'result:{url}', 10, result)
+        return result
+    return invoker
 
 
-@cache_with_tracking(expiration=10)
+@data_cacher
 def get_page(url: str) -> str:
-    """Obtain the HTML content of a particular."""
-    response = requests.get(url)
-    return response.text
-
-
-if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk/delay/5000/url/http://www.google.com"
-    print(get_page(url))
+    '''Returns the content of a URL.'''
+    return requests.get(url).text
