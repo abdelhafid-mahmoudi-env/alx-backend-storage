@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
-"""
-Web cache module
-"""
+"""Module for implementing an expiring."""
 import redis
 import requests
+from typing import Optional
+
+
+r = redis.Redis()
+
 
 def get_page(url: str) -> str:
-    r = redis.Redis()
-    key = f"count:{url}"
-    r.incr(key)
-    cached_page = r.get(url)
-    if cached_page:
-        return cached_page.decode("utf-8")
-
+    """Obtain the HTML content of a particular URL."""
+    count_key = f"count:{url}"
+    r.incr(count_key)
+    cached_html: Optional[bytes] = r.get(url)
+    if cached_html:
+        return cached_html.decode('utf-8')
     response = requests.get(url)
-    r.setex(url, 10, response.text)
-    return response.text
+    html_content = response.text
+    r.setex(url, 10, html_content)
+    return html_content
+
 
 if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk/delay/3000/url/http://www.google.com"
-    print(get_page(url))
-    print(get_page(url))  # Should retrieve from cache
+    test_url = "http://slowwly.robertomurray.co.uk"
+    print(get_page(test_url))
