@@ -1,44 +1,20 @@
-#!/usr/bin/env/ python3
-"""
-This module implements the get_page function.
-"""
-
-import redis
+#!/usr/bin/env python3
+"""This module provides a function"""
 import requests
-from functools import wraps
+import redis
 from typing import Callable
 
-# connect redis
-r = redis.Redis(decode_responses=True)
 
-
-def count_acess_request(method: Callable) -> Callable:
-    """
-    Decorator function which counts number of requests made to a url and caches
-    response
-    """
-
-    @wraps(method)
-    def wrapper(url):
-        """wrapper function"""
-        r.incr(f"count:{url}")
-        cached_data = r.get(f"cached:{url}")
-
-        if cached_data:
-            return cached_data.decode('utf-8')
-        #otherwise
-        result = method(url)
-
-        r.setex(f"cached:{url}", 10, result)
-
-        return result
-
-    return wrapper
+redis_instance = redis.Redis()
 
 
 def get_page(url: str) -> str:
-    """
-    This function fetches HTML content of a particular url and returns it.
-    """
+    cache_key = f"count:{url}"
+    html_content = redis_instance.get(cache_key)
+    if html_content:
+        return html_content.decode('utf-8')
     response = requests.get(url)
-    return response.text
+    html_content = response.text
+    redis_instance.setex(cache_key, 10, html_content)
+    redis_instance.incr(cache_key)
+    return html_content
