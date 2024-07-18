@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
-import redis
+"""Redis and Python exercise"""
 import uuid
 from typing import Union, Callable, Optional
 from functools import wraps
 
+import redis
+
 
 def count_calls(method: Callable) -> Callable:
+    """decorator that takes a single method."""
     @wraps(method)
     def wrapper(self, *args, **kwargs):
+        """increments the count for that key every"""
         self._redis.incr(method.__qualname__)
         return method(self, *args, **kwargs)
     return wrapper
 
 
 def call_history(method: Callable) -> Callable:
+    """stores the history of inputs and outputs."""
     @wraps(method)
     def wrapper(self, *args, **kwargs):
+        """saves the input and output of each."""
         input_list_key = method.__qualname__ + ":inputs"
         output_list_key = method.__qualname__ + ":outputs"
         self._redis.rpush(input_list_key, str(args))
@@ -26,18 +32,28 @@ def call_history(method: Callable) -> Callable:
 
 
 class Cache:
+    """Cache class with redis"""
     def __init__(self):
         self._redis = redis.Redis()
         self._redis.flushdb()
 
     @call_history
     @count_calls
-    def store(self, data: Union[str, bytes, int, float]) -> str:
+    def store(
+            self,
+            data: Union[str, bytes, int, float]
+            ) -> str:
+        """Store method"""
         key = str(uuid.uuid4())
         self._redis.set(key, data)
         return key
 
-    def get(self, key: str, fn: Optional[Callable] = None) -> Union[str, bytes, int, float]:
+    def get(
+            self,
+            key: str,
+            fn: Optional[Callable] = None
+            ) -> Union[str, bytes, int, float]:
+        """ Get data from redis and transform. """
         data = self._redis.get(key)
         if data is None:
             return None
@@ -46,19 +62,36 @@ class Cache:
         return data
 
     def get_str(self, key: str) -> str:
-        return self.get(key, lambda d: d.decode('utf-8'))
+        """ Transform a redis type variable."""
+        return self.get(
+            key,
+            lambda d: d.decode('utf-8')
+            )
 
     def get_int(self, key: str) -> int:
+        """ Transform a redis type variable."""
         return self.get(key, int)
 
 
 def replay(method: Callable):
-    cache = method.__self__
-    input_list_key = method.__qualname__ + ":inputs"
-    output_list_key = method.__qualname__ + ":outputs"
-    inputs = cache._redis.lrange(input_list_key, 0, -1)
-    outputs = cache._redis.lrange(output_list_key, 0, -1)
-    
-    print(f"{method.__qualname__} was called {len(inputs)} times:")
-    for i, o in zip(inputs, outputs):
-        print(f"{method.__qualname__}(*{i.decode('utf-8')}) -> {o.decode('utf-8')}")
+    """Display the history of calls."""
+    r = redis.Redis()
+    f_name = method.__qualname__
+    n_calls = r.get(f_name)
+    try:
+        n_calls = n_calls.decode('utf-8')
+    except Exception:
+        n_calls = 0
+    print(f'{f_name} was called {n_calls} times:')
+    ins = r.lrange(f_name + ":inputs", 0, -1)
+    outs = r.lrange(f_name + ":outputs", 0, -1)
+    for i, o in zip(ins, outs):
+        try:
+            i = i.decode('utf-8')
+        except Exception:
+            i = ""
+        try:
+            o = o.decode('utf-8')
+        except Exception:
+            o = ""
+        print(f'{f_name}(*{i}) -> {o}')
