@@ -1,45 +1,36 @@
 #!/usr/bin/env python3
-"""Web caching and tracking"""
+"""
+web cache and tracker
+"""
 import requests
 import redis
-from typing import Callable
 from functools import wraps
 
-
-r = redis.Redis()
-
-
-def cache_with_expiry(expiry: int):
-    """Decorator to cache the result."""
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(url: str) -> str:
-            """Wrapper function to cache with expiry."""
-            # Track access count
-            r.incr(f"count:{url}")
-
-            # Try to get cached content
-            cached_content = r.get(f"cached:{url}")
-            if cached_content:
-                return cached_content.decode('utf-8')
-
-            # Fetch new content if not cached
-            response = func(url)
-            r.setex(f"cached:{url}", expiry, response)
-            return response
-        return wrapper
-    return decorator
+store = redis.Redis()
 
 
-@cache_with_expiry(10)
+def count_url_access(method):
+    """ Decorator counting how many times
+    a URL is accessed """
+    @wraps(method)
+    def wrapper(url):
+        cached_key = "cached:" + url
+        cached_data = store.get(cached_key)
+        if cached_data:
+            return cached_data.decode("utf-8")
+
+        count_key = "count:" + url
+        html = method(url)
+
+        store.incr(count_key)
+        store.set(cached_key, html)
+        store.expire(cached_key, 10)
+        return html
+    return wrapper
+
+
+@count_url_access
 def get_page(url: str) -> str:
-    """Fetch the HTML content of a URL and cache it."""
-    response = requests.get(url)
-    return response.text
-
-
-if __name__ == "__main__":
-    url = "http://slowwly.robertomurray.co.uk"
-    print(get_page(url))
-    print(get_page(url))
-    print(get_page(url))
+    """ Returns HTML content of a url """
+    res = requests.get(url)
+    return res.text
