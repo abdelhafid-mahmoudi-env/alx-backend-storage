@@ -1,39 +1,53 @@
 #!/usr/bin/env python3
 """
-Web cache and URL tracker
+This module provides a WebCache class to fetch and cache web pages.
 """
-import redis
 import requests
+import redis
 from typing import Callable
-
-
-def count_calls(method: Callable) -> Callable:
-    """Decorator to count the number of calls to a method"""
-    def wrapper(self, *args, **kwargs):
-        self._redis.incr(f"count:{args[0]}")
-        return method(self, *args, **kwargs)
-    return wrapper
+import functools
 
 
 class WebCache:
-    """Web cache class for caching web pages"""
+    """WebCache class for caching web pages and tracking access counts"""
 
     def __init__(self):
         """Initialize the Redis client"""
         self._redis = redis.Redis()
 
-    @count_calls
+    def count_requests(self, method: Callable) -> Callable:
+        """Decorator to count how many times a URL is requested"""
+        @functools.wraps(method)
+        def wrapper(url: str) -> str:
+            count_key = f"count:{url}"
+            self._redis.incr(count_key)
+            return method(url)
+        return wrapper
+
+    def cache_page(self, expiration: int) -> Callable:
+        """Decorator to cache the HTML content of a URL for a specified duration"""
+        def decorator(method: Callable) -> Callable:
+            @functools.wraps(method)
+            def wrapper(url: str) -> str:
+                cache_key = f"cache:{url}"
+                cached_content = self._redis.get(cache_key)
+                if cached_content:
+                    return cached_content.decode('utf-8')
+                html_content = method(url)
+                self._redis.setex(cache_key, expiration, html_content)
+                return html_content
+            return wrapper
+        return decorator
+
+    @count_requests
+    @cache_page(expiration=10)
     def get_page(self, url: str) -> str:
-        """Get the content of a URL and cache it with an expiration time"""
-        cached_page = self._redis.get(url)
-        if cached_page:
-            return cached_page.decode('utf-8')
+        """Fetch the HTML content of a URL"""
         response = requests.get(url)
-        self._redis.setex(url, 10, response.text)
         return response.text
 
 
 if __name__ == "__main__":
-    cache = WebCache()
-    url = "http://slowwly.robertomurray.co.uk"
-    print(cache.get_page(url))
+    web_cache = WebCache()
+    url = 'http://slowwly.robertomurray.co.uk'
+    print(web_cache.get_page(url))
