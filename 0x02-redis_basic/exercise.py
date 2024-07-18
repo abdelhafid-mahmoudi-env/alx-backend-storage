@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """exercise"""
+import redis
 import uuid
 from typing import Union, Callable, Optional
 from functools import wraps
-
-import redis
 
 
 def count_calls(method: Callable) -> Callable:
